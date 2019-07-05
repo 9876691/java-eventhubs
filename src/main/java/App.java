@@ -5,6 +5,7 @@
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,7 +31,6 @@ import com.microsoft.azure.keyvault.KeyVaultClient;
 import com.microsoft.azure.keyvault.authentication.KeyVaultCredentials;
 import com.microsoft.azure.keyvault.models.KeyOperationResult;
 import com.microsoft.azure.keyvault.webkey.JsonWebKeyEncryptionAlgorithm;
-import com.microsoft.azure.management.batch.CertificateUpdateHeaders;
 import com.microsoft.rest.credentials.ServiceClientCredentials;
 
 // https://github.com/Azure/azure-event-hubs/tree/master/samples/Java/Basic/EventProcessorSample
@@ -222,31 +222,19 @@ public class App
                     System.out.println(symmetricKey);
                     System.out.println(keyVaultKeyUriNew);*/
 
-                    if(null == keys.get(keyVaultKeyUri)) {
-                        // We've got a new key
-                        byte[] secret = decryptKey(keyVaultKeyUri, symmetricKey, clientId, clientSecret);
-                        byte[] iv = decryptKey(keyVaultKeyUri, symmetricKeyIV, clientId, clientSecret);
-                        SecretKeySpec secretKeySpec = new SecretKeySpec(secret, "AES");
-                        IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
-                        
-                        Cipher cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                        cipherDecrypt.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
-						keys.put(keyVaultKeyUri, cipherDecrypt);
-                        System.out.println("IV Length " + iv.length);
-                    }
+					Optional<Cipher> cipherDecrypt = getCypher(keyVaultKeyUri, symmetricKey, symmetricKeyIV);
+					cipherDecrypt.ifPresent(cypher -> {
+						try {
+							byte[] decrypted = cypher.doFinal(encryptedPayload);
+	
+							String decryptedText = new String(decrypted, StandardCharsets.UTF_8);
+							
+							System.out.println(decryptedText);
+						} catch(Exception e) {
 
-                    try {
-						Cipher cipherDecrypt = keys.get(keyVaultKeyUri);
-                        byte[] decrypted = cipherDecrypt.doFinal(encryptedPayload);
-    
-						String decryptedText = new String(decrypted, StandardCharsets.UTF_8);
-						
-						System.out.println(decryptedText);
-    
-                        
-                    } catch(Exception e) {
-                        System.out.println(e.getMessage());
-                    }
+							System.out.println(e.getMessage());
+						}
+					});
 	                
 	                // Checkpointing persists the current position in the event stream for this partition and means that the next
 	                // time any host opens an event processor on this event hub+consumer group+partition combination, it will start
@@ -271,6 +259,27 @@ public class App
             }
             System.out.println("SAMPLE: Partition " + context.getPartitionId() + " batch size was " + eventCount + " for host " + context.getOwner());
         }
+	}
+
+	public static Optional<Cipher> getCypher(String keyVaultKeyUri, String symmetricKey, String symmetricKeyIV) {
+
+		try {
+			if(keys.get(keyVaultKeyUri) == null) {
+				// We've got a new key
+				byte[] secret = decryptKey(keyVaultKeyUri, symmetricKey, clientId, clientSecret);
+				byte[] iv = decryptKey(keyVaultKeyUri, symmetricKeyIV, clientId, clientSecret);
+				SecretKeySpec secretKeySpec = new SecretKeySpec(secret, "AES");
+				IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
+				
+				Cipher cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
+				cipherDecrypt.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
+				keys.put(keyVaultKeyUri, cipherDecrypt);
+				System.out.println("IV Length " + iv.length);
+			}
+			return Optional.of(keys.get(keyVaultKeyUri));
+		} catch(Exception e) {
+			return Optional.empty();
+		}
 	}
 	
     public static byte[] decryptKey(String keyIdentifier, String textToDecrypt,
