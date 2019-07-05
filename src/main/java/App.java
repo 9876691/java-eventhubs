@@ -4,6 +4,7 @@
  */
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,6 +30,7 @@ import com.microsoft.azure.keyvault.KeyVaultClient;
 import com.microsoft.azure.keyvault.authentication.KeyVaultCredentials;
 import com.microsoft.azure.keyvault.models.KeyOperationResult;
 import com.microsoft.azure.keyvault.webkey.JsonWebKeyEncryptionAlgorithm;
+import com.microsoft.azure.management.batch.CertificateUpdateHeaders;
 import com.microsoft.rest.credentials.ServiceClientCredentials;
 
 // https://github.com/Azure/azure-event-hubs/tree/master/samples/Java/Basic/EventProcessorSample
@@ -36,6 +38,7 @@ public class App
 {
 	private static String clientId ;
 	private static String clientSecret;
+	private static HashMap<String, Cipher> keys = new HashMap<>();
     public static void main(String args[]) throws InterruptedException, ExecutionException
     {
     	// SETUP SETUP SETUP SETUP
@@ -155,10 +158,6 @@ public class App
     public static class EventProcessor implements IEventProcessor
     {
 		private int checkpointBatchingCount = 0;
-		
-        private String keyVaultKeyUri = null;
-        private byte[] secret = null;
-		private byte[] iv = null;
 
     	// OnOpen is called when a new event processor instance is created by the host. In a real implementation, this
     	// is the place to do initialization so that events can be processed when they arrive, such as opening a database
@@ -216,27 +215,28 @@ public class App
                     String symmetricKey = (String)data.getProperties().get("symmetricKey");
                     
                     //String keyVersion = new String(cr.headers().lastHeader("keyVersion").value(), StandardCharsets.UTF_8).substring(2);
-                    String keyVaultKeyUriNew = (String)data.getProperties().get("keyVaultKeyUri");
+                    String keyVaultKeyUri = (String)data.getProperties().get("keyVaultKeyUri");
                     byte[] encryptedPayload = data.getBytes();
 
                     /*System.out.println(symmetricKeyIV);
                     System.out.println(symmetricKey);
                     System.out.println(keyVaultKeyUriNew);*/
 
-                    if(secret == null || ! keyVaultKeyUriNew.equals(keyVaultKeyUri)) {
+                    if(null == keys.get(keyVaultKeyUri)) {
                         // We've got a new key
-                        secret = decryptKey(keyVaultKeyUriNew, symmetricKey, clientId, clientSecret);
-                        iv = decryptKey(keyVaultKeyUriNew, symmetricKeyIV, clientId, clientSecret);
-                        keyVaultKeyUri = keyVaultKeyUriNew;
-                        System.out.println("IV Length " + iv.length);
-                    }
-
-                    try {
+                        byte[] secret = decryptKey(keyVaultKeyUri, symmetricKey, clientId, clientSecret);
+                        byte[] iv = decryptKey(keyVaultKeyUri, symmetricKeyIV, clientId, clientSecret);
                         SecretKeySpec secretKeySpec = new SecretKeySpec(secret, "AES");
                         IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
                         
                         Cipher cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
                         cipherDecrypt.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
+						keys.put(keyVaultKeyUri, cipherDecrypt);
+                        System.out.println("IV Length " + iv.length);
+                    }
+
+                    try {
+						Cipher cipherDecrypt = keys.get(keyVaultKeyUri);
                         byte[] decrypted = cipherDecrypt.doFinal(encryptedPayload);
     
 						String decryptedText = new String(decrypted, StandardCharsets.UTF_8);
