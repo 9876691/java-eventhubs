@@ -201,26 +201,13 @@ public class App
             	// you of the chance to process any remaining events in the batch. 
             	try
             	{
-	                //System.out.println("SAMPLE (" + context.getPartitionId() + "," + data.getSystemProperties().getOffset() + "," +
-	                //		data.getSystemProperties().getSequenceNumber() + "): " + new String(data.getBytes(), "UTF8"));
-					eventCount++;
+	                eventCount++;
 					
 					
                     String symmetricKeyIV = (String)data.getProperties().get("symmetricKeyIV");
-                    //siv = Arrays.copyOfRange(siv, 5, siv.length - 2);
-                    //String symmetricKeyIV = new String(siv, StandardCharsets.UTF_8);
-                    
-                    //String symmetricKey =  cr.headers().lastHeader("symmetricKey").value();
-                    //sik = Arrays.copyOfRange(sik, 5, sik.length - 2);
                     String symmetricKey = (String)data.getProperties().get("symmetricKey");
-                    
-                    //String keyVersion = new String(cr.headers().lastHeader("keyVersion").value(), StandardCharsets.UTF_8).substring(2);
                     String keyVaultKeyUri = (String)data.getProperties().get("keyVaultKeyUri");
                     byte[] encryptedPayload = data.getBytes();
-
-                    /*System.out.println(symmetricKeyIV);
-                    System.out.println(symmetricKey);
-                    System.out.println(keyVaultKeyUriNew);*/
 
 					Optional<Cipher> cipherDecrypt = getCypher(keyVaultKeyUri, symmetricKey, symmetricKeyIV);
 					cipherDecrypt.ifPresent(cypher -> {
@@ -232,7 +219,10 @@ public class App
 							System.out.println(decryptedText);
 						} catch(Exception e) {
 
-							System.out.println(e.getMessage());
+							System.out.println("Error for " + keyVaultKeyUri.split("/keys")[1] 
+								+ " IV[" + symmetricKeyIV.substring(symmetricKeyIV.length() - 8) + "]"
+								+ " KEY[" + symmetricKey.substring(symmetricKey.length() - 8) + "]"
+								+ " : " + e.getMessage());
 						}
 					});
 	                
