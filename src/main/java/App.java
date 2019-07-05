@@ -264,17 +264,20 @@ public class App
 	public static Optional<Cipher> getCypher(String keyVaultKeyUri, String symmetricKey, String symmetricKeyIV) {
 
 		try {
-			if(keys.get(keyVaultKeyUri) == null) {
-				// We've got a new key
-				byte[] secret = decryptKey(keyVaultKeyUri, symmetricKey, clientId, clientSecret);
-				byte[] iv = decryptKey(keyVaultKeyUri, symmetricKeyIV, clientId, clientSecret);
-				SecretKeySpec secretKeySpec = new SecretKeySpec(secret, "AES");
-				IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
-				
-				Cipher cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
-				cipherDecrypt.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
-				keys.put(keyVaultKeyUri, cipherDecrypt);
-				System.out.println("IV Length " + iv.length);
+			// Only one thread at a time to access the cache.
+			synchronized(keys) {
+				if(keys.get(keyVaultKeyUri) == null) {
+					// We've got a new key
+					byte[] secret = decryptKey(keyVaultKeyUri, symmetricKey, clientId, clientSecret);
+					byte[] iv = decryptKey(keyVaultKeyUri, symmetricKeyIV, clientId, clientSecret);
+					SecretKeySpec secretKeySpec = new SecretKeySpec(secret, "AES");
+					IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
+					
+					Cipher cipherDecrypt = Cipher.getInstance("AES/CBC/PKCS5Padding");
+					cipherDecrypt.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
+					keys.put(keyVaultKeyUri, cipherDecrypt);
+					System.out.println("IV Length " + iv.length);
+				}
 			}
 			return Optional.of(keys.get(keyVaultKeyUri));
 		} catch(Exception e) {
