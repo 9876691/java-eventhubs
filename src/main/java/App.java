@@ -215,8 +215,11 @@ public class App
 							byte[] decrypted = cypher.doFinal(encryptedPayload);
 	
 							String decryptedText = new String(decrypted, StandardCharsets.UTF_8);
-							
 							System.out.println(decryptedText);
+							System.out.println("Success for " + keyVaultKeyUri.split("/keys")[1] 
+								+ " IV[" + symmetricKeyIV.substring(symmetricKeyIV.length() - 8) + "]"
+								+ " KEY[" + symmetricKey.substring(symmetricKey.length() - 8) + "]"
+								+ " : " + decryptedText);
 						} catch(Exception e) {
 
 							System.out.println("Error for " + keyVaultKeyUri.split("/keys")[1] 
